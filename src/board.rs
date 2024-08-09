@@ -109,12 +109,11 @@ pub const SQUARES: [Square; 64] = {
     ]
 };
 
-// #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-// pub struct Move {
-//     from: Square,
-//     to: Square,
-//     piece: Piece,
-// }
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub struct Move {
+    pub from: Square,
+    pub to: Square,
+}
 
 /// A bit board representation of a game of chess.
 /// A chess board has 64 squares, so it can be represented as a 64-bit unsigned integer.
@@ -144,25 +143,71 @@ impl Board {
     /// Create a new chess board with the pieces arranged in the standard fashion.
     pub fn new() -> Self {
         Self {
-            pawns_black: 0b00000000_00000000_00000000_00000000_00000000_00000000_11111111_00000000,
-            bishops_black:
-                0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00100100,
-            knights_black:
-                0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_01000010,
-            rooks_black: 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_10000001,
-            king_black: 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00001000,
-            queen_black: 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00010000,
-
-            pawns_white: 0b00000000_11111111_00000000_00000000_00000000_00000000_00000000_00000000,
+            pawns_white: 0b00000000_00000000_00000000_00000000_00000000_00000000_11111111_00000000,
             bishops_white:
-                0b00100100_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
+                0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00100100,
             knights_white:
+                0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_01000010,
+            rooks_white: 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_10000001,
+            king_white: 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00001000,
+            queen_white: 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00010000,
+
+            pawns_black: 0b00000000_11111111_00000000_00000000_00000000_00000000_00000000_00000000,
+            bishops_black:
+                0b00100100_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
+            knights_black:
                 0b01000010_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
-            rooks_white: 0b10000001_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
-            king_white: 0b00001000_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
-            queen_white: 0b00010000_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
+            rooks_black: 0b10000001_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
+            king_black: 0b00001000_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
+            queen_black: 0b00010000_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
 
             white_to_move: true,
+        }
+    }
+
+    fn clear(&mut self, square: Square) {
+        let mask = square.bit_mask();
+        println!("{square:?} {mask:b}");
+        self.pawns_black ^= mask;
+        self.bishops_black ^= mask;
+        self.knights_black ^= mask;
+        self.rooks_black ^= mask;
+        self.king_black ^= mask;
+        self.queen_black ^= mask;
+        self.pawns_white ^= mask;
+        self.bishops_white ^= mask;
+        self.knights_white ^= mask;
+        self.rooks_white ^= mask;
+        self.king_white ^= mask;
+        self.queen_white ^= mask;
+    }
+
+    fn place(&mut self, piece: Piece, at: Square) {
+        let mask = at.bit_mask();
+        match piece {
+            Piece::PawnWhite => self.pawns_white |= mask,
+            Piece::KnightWhite => self.knights_white |= mask,
+            Piece::BishopWhite => self.bishops_white |= mask,
+            Piece::RookWhite => self.rooks_white |= mask,
+            Piece::QueenWhite => self.queen_white |= mask,
+            Piece::KingWhite => self.king_white |= mask,
+            Piece::PawnBlack => self.pawns_black |= mask,
+            Piece::KnightBlack => self.knights_black |= mask,
+            Piece::BishopBlack => self.bishops_black |= mask,
+            Piece::RookBlack => self.rooks_black |= mask,
+            Piece::QueenBlack => self.queen_black |= mask,
+            Piece::KingBlack => self.king_black |= mask,
+        }
+    }
+
+    /// Applies a move to the board with _no_ validation.
+    pub fn apply(&mut self, r#move: Move) {
+        // Look up what piece is moving.
+        if let Some(from_piece) = self.at(r#move.from) {
+            println!("{from_piece:?}");
+            // Clear square that piece is moving from.
+            self.clear(r#move.from);
+            self.place(from_piece, r#move.to);
         }
     }
 
@@ -206,7 +251,7 @@ impl Display for Board {
 
         for square in SQUARES {
             if square.file() == 0 {
-                out.push_str(format!("{} | ", 8 - square.rank()).as_str());
+                out.push_str(format!("{} | ", square.rank() + 1).as_str());
             }
 
             match self.at(square) {
