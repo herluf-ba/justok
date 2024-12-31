@@ -17,6 +17,26 @@ pub enum Piece {
     KingBlack,
 }
 
+impl Piece {
+    pub fn from_char(c: &char) -> Option<Self> {
+        match c {
+            'p' => Some(Self::PawnBlack),
+            'P' => Some(Self::PawnWhite),
+            'r' => Some(Self::RookBlack),
+            'R' => Some(Self::RookWhite),
+            'n' => Some(Self::KnightBlack),
+            'N' => Some(Self::KnightWhite),
+            'b' => Some(Self::BishopBlack),
+            'B' => Some(Self::BishopWhite),
+            'k' => Some(Self::KingBlack),
+            'K' => Some(Self::KingWhite),
+            'q' => Some(Self::QueenBlack),
+            'Q' => Some(Self::QueenWhite),
+            _ => None,
+        }
+    }
+}
+
 impl Display for Piece {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -83,16 +103,18 @@ impl Square {
         }
     }
 
+    pub fn from_rank_and_file(rank: usize, file: usize) -> Option<Self> {
+        SQUARES.get(rank * 8 + file).copied()
+    }
+
     /// Gets a u64 with a 1 bit at the position corresponding to this square.
     pub fn bit_mask(&self) -> u64 {
         1u64 << self.rank() * 8 + self.file()
     }
-
-    /// Gets all the squares corresponding to all the 1-bits in a board mask.
-    pub fn from_bit_mask(mask: u64) -> Vec<Square> {}
 }
 
 /// Every square, for convenient iteration!
+/// Note that the order matters here. Piece::from_rank_and_file relies on it.
 pub const SQUARES: [Square; 64] = {
     use Square::*;
     [
@@ -133,29 +155,73 @@ pub struct Board {
 }
 
 impl Board {
-    /// Create a new chess board with the pieces arranged in the standard fashion.
-    pub fn new() -> Self {
+    /// Create a new chess board with no pieces placed.
+    pub fn blank() -> Self {
         Self {
-            pawns_white: 0b00000000_00000000_00000000_00000000_00000000_00000000_11111111_00000000,
-            bishops_white:
-                0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00100100,
-            knights_white:
-                0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_01000010,
-            rooks_white: 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_10000001,
-            king_white: 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00001000,
-            queen_white: 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00010000,
-
-            pawns_black: 0b00000000_11111111_00000000_00000000_00000000_00000000_00000000_00000000,
-            bishops_black:
-                0b00100100_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
-            knights_black:
-                0b01000010_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
-            rooks_black: 0b10000001_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
-            king_black: 0b00001000_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
-            queen_black: 0b00010000_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
-
+            pawns_white: 0,
+            bishops_white: 0,
+            knights_white: 0,
+            rooks_white: 0,
+            king_white: 0,
+            queen_white: 0,
+            pawns_black: 0,
+            bishops_black: 0,
+            knights_black: 0,
+            rooks_black: 0,
+            king_black: 0,
+            queen_black: 0,
             white_to_move: true,
         }
+    }
+
+    /// Create a bit-board from a Forsyth-Edwards-Notation (FEN) string.
+    pub fn from_fen_string(fen: &str) -> Self {
+        // TODO: Make this return Result and don't panic
+
+        // FEN contains 6 fields separated by space.
+        // They are:
+        // 1. Piece placement.
+        // 2. Side to move (w/b)
+        // 3. Castling ability
+        // 4. En pessant target square
+        // 5. Halfmove clock
+        // 6. Fullmove counter
+        // Fields 5. and 6. may be left out.
+        let fields: Vec<_> = fen.split_whitespace().collect();
+        if fields.len() > 6 || fields.len() < 4 {
+            panic!("Not a valid FEN string: '{fen}'");
+        }
+
+        // Read piece placement and place onto blank board.
+        // Placement is presented from rank 8 to 1, each rank separated by '/'.
+        // Each rank lists the pieces (pnbrqk) going from file 1 to 8. White is uppercase.
+        // N consequtive blank squares are listed as the number N.
+        // For example here is the standard setup:
+        // rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR
+        let mut board = Self::blank();
+        let placement = fields[0];
+        for (rank_idx, rank_str) in placement.split('/').enumerate() {
+            let rank = 7 - rank_idx;
+            let mut file = 0;
+            for piece in rank_str.chars() {
+                match piece {
+                    '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' => {
+                        // Skip this amount of squares
+                        file += piece.to_string().parse::<usize>().unwrap();
+                    }
+                    p => {
+                        if let Some(valid) = Piece::from_char(&p) {
+                            board.place(valid, Square::from_rank_and_file(rank, file).unwrap());
+                            file += 1
+                        } else {
+                            panic!("Not a valid FEN string: '{fen}'")
+                        }
+                    }
+                }
+            }
+        }
+
+        board
     }
 
     fn clear(&mut self, square: Square) {
@@ -235,11 +301,6 @@ impl Board {
             None
         }
     }
-
-    /// Generates a list of all valid moves given the current board state.
-    pub fn generate_moves() -> Vec<Move> {
-        // Get all player pieces and their positions.
-    }
 }
 
 impl Display for Board {
@@ -247,21 +308,17 @@ impl Display for Board {
         let mut out = String::with_capacity(1028); // make sure the string has capacity for the board string.
         out.push_str("   -----------------\n");
 
-        for square in SQUARES {
-            if square.file() == 0 {
-                out.push_str(format!("{} | ", square.rank() + 1).as_str());
+        for r in (0..8).rev() {
+            out.push_str(format!("{} | ", r + 1).as_str());
+            for f in 0..8 {
+                let square = Square::from_rank_and_file(r, f).unwrap();
+                match self.at(square) {
+                    None => out.push_str("  "),
+                    Some(piece) => out.push_str(format!("{} ", piece).as_str()),
+                }
             }
-
-            match self.at(square) {
-                None => out.push_str("  "),
-                Some(piece) => out.push_str(format!("{} ", piece).as_str()),
-            }
-
-            if square.file() == 7 {
-                out.push_str("|\n");
-            }
+            out.push_str("|\n");
         }
-
         out.push_str("   -----------------\n    a b c d e f g h");
         write!(f, "{}", out)
     }
