@@ -83,20 +83,13 @@ impl Square {
         }
     }
 
+    /// Gets a u64 with a 1 bit at the position corresponding to this square.
     pub fn bit_mask(&self) -> u64 {
         1u64 << self.rank() * 8 + self.file()
     }
 
-    pub fn iterator() -> impl Iterator<Item = Square> {
-        use Square::*;
-        [
-            A1, A2, A3, A4, A5, A6, A7, A8, B1, B2, B3, B4, B5, B6, B7, B8, C1, C2, C3, C4, C5, C6,
-            C7, C8, D1, D2, D3, D4, D5, D6, D7, D8, E1, E2, E3, E4, E5, E6, E7, E8, F1, F2, F3, F4,
-            F5, F6, F7, F8, G1, G2, G3, G4, G5, G6, G7, G8, H1, H2, H3, H4, H5, H6, H7, H8,
-        ]
-        .iter()
-        .copied()
-    }
+    /// Gets all the squares corresponding to all the 1-bits in a board mask.
+    pub fn from_bit_mask(mask: u64) -> Vec<Square> {}
 }
 
 /// Every square, for convenient iteration!
@@ -166,23 +159,24 @@ impl Board {
     }
 
     fn clear(&mut self, square: Square) {
-        let mask = square.bit_mask();
-        println!("{square:?} {mask:b}");
-        self.pawns_black ^= mask;
-        self.bishops_black ^= mask;
-        self.knights_black ^= mask;
-        self.rooks_black ^= mask;
-        self.king_black ^= mask;
-        self.queen_black ^= mask;
-        self.pawns_white ^= mask;
-        self.bishops_white ^= mask;
-        self.knights_white ^= mask;
-        self.rooks_white ^= mask;
-        self.king_white ^= mask;
-        self.queen_white ^= mask;
+        let mask = !square.bit_mask();
+        self.pawns_black &= mask;
+        self.bishops_black &= mask;
+        self.knights_black &= mask;
+        self.rooks_black &= mask;
+        self.king_black &= mask;
+        self.queen_black &= mask;
+        self.pawns_white &= mask;
+        self.bishops_white &= mask;
+        self.knights_white &= mask;
+        self.rooks_white &= mask;
+        self.king_white &= mask;
+        self.queen_white &= mask;
     }
 
     fn place(&mut self, piece: Piece, at: Square) {
+        self.clear(at); // Clear any pieces off the target square.
+
         let mask = at.bit_mask();
         match piece {
             Piece::PawnWhite => self.pawns_white |= mask,
@@ -204,8 +198,7 @@ impl Board {
     pub fn apply(&mut self, r#move: Move) {
         // Look up what piece is moving.
         if let Some(from_piece) = self.at(r#move.from) {
-            println!("{from_piece:?}");
-            // Clear square that piece is moving from.
+            // Clear square that piece is moving from and to.
             self.clear(r#move.from);
             self.place(from_piece, r#move.to);
         }
@@ -241,6 +234,11 @@ impl Board {
         } else {
             None
         }
+    }
+
+    /// Generates a list of all valid moves given the current board state.
+    pub fn generate_moves() -> Vec<Move> {
+        // Get all player pieces and their positions.
     }
 }
 
