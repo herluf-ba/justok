@@ -25,7 +25,6 @@ pub trait Board: PartialEq + Eq + Clone + Copy + Display {
     fn white_to_move(&self) -> bool;
 
     /// Generate all [Move]s possible within the current [Board].
-
     fn generate_moves(&self) -> Vec<Move> {
         let mut moves = Vec::new();
 
@@ -95,12 +94,47 @@ fn generate_piece_moves<T: Board>(board: &T, piece: Piece, at: Square) -> Vec<Sq
 
             moves.chain(captures).collect()
         }
-        Piece::KnightWhite => Vec::new(),
+        Piece::KnightWhite | Piece::KnightBlack => {
+            let rank = at as i8 / 8;
+            let file = at as i8 % 8;
+            // Knights may move two squares orthogonally and then one square along the other orthogonal axis.
+            // That comes out to 8 unique squares to land on.
+            // . x . x .
+            // x . . . x
+            // . . k . .
+            // x . . . x
+            // . x . x .
+            let candidates = [
+                (rank < 6 && file < 7, (rank + 2) * 8 + file + 1),
+                (rank < 6 && file > 0, (rank + 2) * 8 + file - 1),
+                (rank > 2 && file < 7, (rank - 2) * 8 + file + 1),
+                (rank > 2 && file > 0, (rank - 2) * 8 + file - 1),
+                (rank < 7 && file > 2, (rank + 1) * 8 + file - 2),
+                (rank > 0 && file > 2, (rank - 1) * 8 + file - 2),
+                (rank < 7 && file < 6, (rank + 1) * 8 + file + 2),
+                (rank > 0 && file < 6, (rank - 1) * 8 + file + 2),
+            ];
+            candidates
+                .into_iter()
+                // filter off the squares outside the board
+                .filter_map(|(has_space, square)| {
+                    has_space
+                        .then_some(square)
+                        .map(|s| u8::try_from(s).ok())
+                        .flatten()
+                })
+                // A knight may land on a square with a opposite colored piece or no piece.
+                .filter(|&square| match board.at(square) {
+                    Some(other) if other.is_white() != piece.is_white() => true,
+                    None => true,
+                    _ => false,
+                })
+                .collect()
+        }
         Piece::BishopWhite => Vec::new(),
         Piece::RookWhite => Vec::new(),
         Piece::QueenWhite => Vec::new(),
         Piece::KingWhite => Vec::new(),
-        Piece::KnightBlack => Vec::new(),
         Piece::BishopBlack => Vec::new(),
         Piece::RookBlack => Vec::new(),
         Piece::QueenBlack => Vec::new(),

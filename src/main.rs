@@ -19,7 +19,8 @@ fn format_moves(board: &BitBoard, moves: &Vec<Move>) -> Vec<String> {
 }
 
 fn main() {
-    let standard = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq e3 0 1";
+    let standard = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq e3 0 1";
+    // let standard = "8/8/8/8/8/8/8/6N1 w KQkq e3 0 1";
     let board = BitBoard::from_fen_string(standard);
     println!("{board}");
     let moves = board.generate_moves();
