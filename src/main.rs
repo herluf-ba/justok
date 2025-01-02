@@ -1,14 +1,30 @@
 mod board;
 
-use board::Board;
+use board::{generate_moves, Board, Move};
 
 // TODO:
 // - [x] Make a function for applying a move to the board
 // - [ ] Read FEN positions into bitboards.
 // - [ ] Generate a list of valid moves starting at a certain square.
 
+const FILES: [char; 8] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+fn format_moves(board: &Board, moves: &Vec<Move>) -> Vec<String> {
+    moves
+        .iter()
+        .map(|r#move| {
+            let piece = board.at(r#move.from).unwrap();
+            let rank = r#move.to / 8 + 1;
+            let file = FILES[(r#move.to % 8) as usize];
+            format!("{piece}{file}{rank}")
+        })
+        .collect::<Vec<_>>()
+}
+
 fn main() {
-    let standard_with_e4 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1";
-    let board = Board::from_fen_string(standard_with_e4);
-    board.generate_moves();
+    let standard = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq e3 0 1";
+    let board = Board::from_fen_string(standard);
+    println!("{board}");
+    let moves = generate_moves(&board);
+    let formatted = format_moves(&board, &moves).join(", ");
+    println!("{formatted}");
 }

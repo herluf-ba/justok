@@ -35,6 +35,17 @@ impl Piece {
             _ => None,
         }
     }
+    pub fn is_white(&self) -> bool {
+        match self {
+            Piece::PawnWhite
+            | Piece::KnightWhite
+            | Piece::BishopWhite
+            | Piece::RookWhite
+            | Piece::QueenWhite
+            | Piece::KingWhite => true,
+            _ => false,
+        }
+    }
 }
 
 impl Display for Piece {
@@ -251,27 +262,6 @@ impl Board {
             None
         }
     }
-
-    pub fn generate_moves(&self) -> Vec<Move> {
-        let moves = Vec::new();
-
-        for r in (0..8).rev() {
-            for f in 0..8 {
-                let square = r * 8 + f;
-                match self.at(square) {
-                    None => continue, // Square was empty
-                    Some(p) => {
-                        use Piece::*;
-                        match p {
-                            _ => todo!(),
-                        }
-                    }
-                }
-            }
-        }
-
-        moves
-    }
 }
 
 impl Display for Board {
@@ -292,5 +282,95 @@ impl Display for Board {
         }
         out.push_str("   -----------------\n    a b c d e f g h");
         write!(f, "{}", out)
+    }
+}
+
+/// Generates the possible moves given a particular board state.
+pub fn generate_moves(board: &Board) -> Vec<Move> {
+    let mut moves = Vec::new();
+
+    for r in (0..8).rev() {
+        for f in 0..8 {
+            let square = r * 8 + f;
+            match board.at(square) {
+                // Square had a piece with the color whose turn it is
+                Some(piece) if board.white_to_move == piece.is_white() => {
+                    let valid_target_squares = generate_piece_moves(board, piece, square);
+                    let mut piece_moves: Vec<Move> = valid_target_squares
+                        .iter()
+                        .map(|target| Move {
+                            from: square,
+                            to: *target,
+                        })
+                        .collect();
+                    moves.append(&mut piece_moves);
+                }
+
+                // Square was empty, or had the wrong color piece.
+                _ => continue,
+            }
+        }
+    }
+
+    moves
+}
+
+/// Converts a i8 that may point to a square in a board to a valid Square if possible.
+/// Hint: If you have an iterator over maybe_squares, use filter_map(to_board_square) on it.
+fn to_board_square(maybe_square: i8) -> Option<Square> {
+    (maybe_square > 0 && maybe_square < 64)
+        .then(|| u8::try_from(maybe_square).ok())
+        .flatten()
+}
+
+/// Generate the valid moves for a particular piece on a certain square within a board.
+fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> {
+    match piece {
+        Piece::PawnWhite | Piece::PawnBlack => {
+            // TODO: en pessant!
+            let rank = at as i8 / 8;
+            let file = at as i8 % 8;
+            let direction: i8 = match piece.is_white() {
+                true => 1,
+                false => -1,
+            };
+
+            // A pawn may move one square towards the opposing player.
+            let mut candidates = vec![(rank + direction) * 8 + file];
+            // If it is in it's starting rank, it may leap two squares.
+            match (piece.is_white(), rank) {
+                (true, 1) | (false, 6) => candidates.push((rank + 2 * direction) * 8 + file),
+                _ => {}
+            };
+            // Filter off squares where another piece of any color resides (pawns capture diagonally).
+            let moves = candidates
+                .into_iter()
+                .filter_map(to_board_square)
+                .filter(|&square| board.at(square).is_none());
+
+            // A pawn may capture diagonally.
+            let captures = [
+                (rank + direction) * 8 + file + 1,
+                (rank + direction) * 8 + file - 1,
+            ]
+            .into_iter()
+            .filter_map(to_board_square)
+            .filter(|&square| match board.at(square) {
+                Some(other) if other.is_white() != piece.is_white() => true,
+                _ => false,
+            });
+
+            moves.chain(captures).collect()
+        }
+        Piece::KnightWhite => Vec::new(),
+        Piece::BishopWhite => Vec::new(),
+        Piece::RookWhite => Vec::new(),
+        Piece::QueenWhite => Vec::new(),
+        Piece::KingWhite => Vec::new(),
+        Piece::KnightBlack => Vec::new(),
+        Piece::BishopBlack => Vec::new(),
+        Piece::RookBlack => Vec::new(),
+        Piece::QueenBlack => Vec::new(),
+        Piece::KingBlack => Vec::new(),
     }
 }
