@@ -1,14 +1,12 @@
-mod board;
-
-use board::{generate_moves, Board, Move};
-
 // TODO:
 // - [x] Make a function for applying a move to the board
 // - [ ] Read FEN positions into bitboards.
 // - [ ] Generate a list of valid moves starting at a certain square.
 
+use termchess::{bit_board::BitBoard, board::Board, Move};
+
 const FILES: [char; 8] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-fn format_moves(board: &Board, moves: &Vec<Move>) -> Vec<String> {
+fn format_moves(board: &BitBoard, moves: &Vec<Move>) -> Vec<String> {
     moves
         .iter()
         .map(|r#move| {
@@ -21,10 +19,10 @@ fn format_moves(board: &Board, moves: &Vec<Move>) -> Vec<String> {
 }
 
 fn main() {
-    let standard = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq e3 0 1";
-    let board = Board::from_fen_string(standard);
+    let standard = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq e3 0 1";
+    let board = BitBoard::from_fen_string(standard);
     println!("{board}");
-    let moves = generate_moves(&board);
+    let moves = board.generate_moves();
     let formatted = format_moves(&board, &moves).join(", ");
     println!("{formatted}");
 }
