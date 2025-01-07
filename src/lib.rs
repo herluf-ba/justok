@@ -1,23 +1,23 @@
 use std::fmt::Display;
 
-pub mod bit_board;
 pub mod board;
 
 /// Every type of piece in chess.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum Piece {
-    PawnWhite,
-    KnightWhite,
-    BishopWhite,
-    RookWhite,
-    QueenWhite,
-    KingWhite,
-    PawnBlack,
-    KnightBlack,
-    BishopBlack,
-    RookBlack,
-    QueenBlack,
-    KingBlack,
+    Null = 0,
+    PawnWhite = 1,
+    KnightWhite = 2,
+    BishopWhite = 3,
+    RookWhite = 4,
+    QueenWhite = 5,
+    KingWhite = 6,
+    PawnBlack = 8,
+    KnightBlack = 9,
+    BishopBlack = 10,
+    RookBlack = 11,
+    QueenBlack = 12,
+    KingBlack = 13,
 }
 
 impl Piece {
@@ -42,17 +42,30 @@ impl Piece {
         }
     }
 
+    /// Converts this piece to a FEN notation char.
+    /// Example: PawnBlack -> 'a'
+    /// Example: KingWhite -> 'K'
+    pub fn to_char(&self) -> char {
+        match self {
+            Self::PawnBlack => 'p',
+            Self::PawnWhite => 'P',
+            Self::RookBlack => 'r',
+            Self::RookWhite => 'R',
+            Self::KnightBlack => 'n',
+            Self::KnightWhite => 'N',
+            Self::BishopBlack => 'b',
+            Self::BishopWhite => 'B',
+            Self::KingBlack => 'k',
+            Self::KingWhite => 'K',
+            Self::QueenBlack => 'q',
+            Self::QueenWhite => 'Q',
+            _ => ' ',
+        }
+    }
+
     /// Tells wether this piece is white.
     pub fn is_white(&self) -> bool {
-        match self {
-            Piece::PawnWhite
-            | Piece::KnightWhite
-            | Piece::BishopWhite
-            | Piece::RookWhite
-            | Piece::QueenWhite
-            | Piece::KingWhite => true,
-            _ => false,
-        }
+        *self as u8 != 0 && *self as u8 >> 1 < 1
     }
 }
 
@@ -62,6 +75,7 @@ impl Display for Piece {
             f,
             "{}",
             match self {
+                Piece::Null => " ",
                 Piece::PawnWhite => "♙",
                 Piece::PawnBlack => "♟︎",
                 Piece::KnightWhite => "♘",
@@ -79,6 +93,9 @@ impl Display for Piece {
     }
 }
 
+/// Letters of the eight files on a chess board.
+pub const FILES: [char; 8] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
 /// An integer representing a square on a chess board.
 /// There are 64 unique positions on the board, so we actually only need 6 bits.
 /// A u8 suffices for now.
@@ -92,9 +109,44 @@ pub fn to_board_square(maybe_square: i8) -> Option<Square> {
         .flatten()
 }
 
+pub fn square_to_algebraic(square: Square) -> String {
+    let rank = (square / 8) + 1;
+    let file = FILES[(square % 8) as usize];
+    format!("{file}{rank}").to_owned()
+}
+
+pub fn square_from_algebraic(long_algebraic: &str) -> Square {
+    let mut chars = long_algebraic.chars();
+    let file = match chars.next() {
+        Some('a') => 0,
+        Some('b') => 1,
+        Some('c') => 2,
+        Some('d') => 3,
+        Some('e') => 4,
+        Some('f') => 5,
+        Some('g') => 6,
+        Some('h') => 7,
+        _ => panic!("Invalid square {}", long_algebraic),
+    };
+    let rank = chars.next().and_then(|c| c.to_digit(10)).unwrap() - 1;
+    u8::try_from(rank * 8 + file).unwrap()
+}
+
 /// A move between two squares.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct Move {
     pub from: Square,
     pub to: Square,
+}
+
+impl Move {
+    /// Read a move from long algebraic notation.
+    /// Example "b1a3" -> Move { from: , to: }
+    /// Will panic if the move is not valid (has rank or file outside normal chess board).
+    pub fn from_str(long_algebraic: &str) -> Move {
+        assert!(long_algebraic.len() >= 4);
+        let from = square_from_algebraic(&long_algebraic[0..2]);
+        let to = square_from_algebraic(&long_algebraic[2..4]);
+        Move { from, to }
+    }
 }

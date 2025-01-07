@@ -1,31 +1,248 @@
 use std::fmt::Display;
 
-use crate::{to_board_square, Move, Piece, Square};
+use crate::{square_from_algebraic, square_to_algebraic, to_board_square, Move, Piece, Square};
 
-pub trait Board: PartialEq + Eq + Clone + Copy + Display {
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub struct Board {
+    pieces: [Piece; 64],
+    white_to_move: bool,
+    en_pessant_square: Option<Square>,
+    can_white_castle_king_side: bool,
+    can_white_castle_queen_side: bool,
+    can_black_castle_king_side: bool,
+    can_black_castle_queen_side: bool,
+    half_move_clock: u32,
+    full_move_counter: u32,
+}
+
+impl Board {
     /// Create a new chess board with no pieces placed.
-    fn blank() -> Self;
+    pub fn blank() -> Self {
+        Self {
+            pieces: [Piece::Null; 64],
+            white_to_move: true,
+            en_pessant_square: None,
+            can_white_castle_king_side: true,
+            can_white_castle_queen_side: true,
+            can_black_castle_king_side: true,
+            can_black_castle_queen_side: true,
+            half_move_clock: 0,
+            full_move_counter: 0,
+        }
+    }
 
     /// Create a board from a Forsyth-Edwards-Notation (FEN) string.
-    fn from_fen_string(fen: &str) -> Self;
+    pub fn from_fen(fen: &str) -> Self {
+        // TODO: Make this return Result and don't panic
+
+        // FEN contains 6 fields separated by space.
+        // They are:
+        // 1. Piece placement.
+        // 2. Side to move (w/b)
+        // 3. Castling ability
+        // 4. En pessant target square
+        // 5. Halfmove clock
+        // 6. Fullmove counter
+        // Fields 5. and 6. may be left out.
+        let fields: Vec<_> = fen.split_whitespace().collect();
+        if fields.len() > 6 || fields.len() < 4 {
+            panic!("Not a valid FEN string: '{fen}'");
+        }
+
+        // Read piece placement and place onto blank board.
+        // Placement is presented from rank 8 to 1, each rank separated by '/'.
+        // Each rank lists the pieces (pnbrqk) going from file 1 to 8. White is uppercase.
+        // N consequtive blank squares are listed as the number N.
+        // For example here is the standard setup:
+        // rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR
+        let mut board = Self::blank();
+        let placement = fields[0];
+        for (rank_idx, rank_str) in placement.split('/').enumerate() {
+            let rank: u8 = 7 - (rank_idx as u8);
+            let mut file: u8 = 0;
+            for piece in rank_str.chars() {
+                match piece {
+                    '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' => {
+                        // Skip this amount of squares
+                        file += piece.to_string().parse::<u8>().unwrap();
+                    }
+                    p => {
+                        if let Some(valid) = Piece::from_char(&p) {
+                            board.place(valid, rank * 8 + file);
+                            file += 1
+                        } else {
+                            panic!("Not a valid FEN string: '{fen}'")
+                        }
+                    }
+                }
+            }
+        }
+
+        // Read whose turn it is.
+        match fields[1] {
+            "w" => board.white_to_move = true,
+            "b" => board.white_to_move = false,
+            _ => panic!("Not a valid FEN string: '{fen}'"),
+        }
+
+        // Read castling rights.
+        let castling = fields[2];
+        if castling.contains("K") {
+            board.can_white_castle_king_side = true;
+        }
+        if castling.contains("Q") {
+            board.can_white_castle_queen_side = true;
+        }
+        if castling.contains("k") {
+            board.can_black_castle_king_side = true;
+        }
+        if castling.contains("q") {
+            board.can_black_castle_queen_side = true;
+        }
+
+        // Read en pessant square.
+        match fields[3] {
+            "-" => {
+                board.en_pessant_square = None;
+            }
+            square => board.en_pessant_square = Some(square_from_algebraic(square)),
+        }
+
+        // Read half and full clock counts.
+        board.half_move_clock = fields[4].parse::<u32>().unwrap();
+        board.full_move_counter = fields[5].parse::<u32>().unwrap();
+
+        // TODO: Read the rest of the FEN string.
+
+        board
+    }
+
+    /// Create a Forsyth-Edwards-Notation (FEN) string from the current board.
+    pub fn to_fen(&self) -> String {
+        // FEN contains 6 fields separated by space.
+        // They are:
+        // 1. Piece placement.
+        // 2. Side to move (w/b)
+        // 3. Castling ability
+        // 4. En pessant target square
+        // 5. Halfmove clock
+        // 6. Fullmove counter
+        // Fields 5. and 6. may be left out.
+        let mut fen = String::with_capacity(65 + 2 + 5 + 3 + 2 + 2);
+
+        // Generate the piece placement
+        for r in (0..8).rev() {
+            let mut consequitive_empty = 0;
+            for f in 0..8 {
+                match self.at(r * 8 + f) {
+                    Some(Piece::Null) => {
+                        consequitive_empty += 1;
+                    }
+                    Some(piece) => {
+                        if consequitive_empty > 0 {
+                            fen.push(char::from_digit(consequitive_empty, 10).unwrap());
+                            consequitive_empty = 0;
+                        }
+                        fen.push(piece.to_char())
+                    }
+                    _ => {}
+                }
+            }
+            if consequitive_empty > 0 {
+                fen.push(char::from_digit(consequitive_empty, 10).unwrap());
+            }
+            fen.push('/');
+        }
+
+        fen.pop(); // Drop trailing '/'.
+
+        // Write whose turn it is.
+        match self.white_to_move {
+            true => fen.push_str(" w"),
+            false => fen.push_str(" b"),
+        }
+
+        // Write castling rights.
+        fen.push(' ');
+        if self.can_white_castle_king_side {
+            fen.push('K');
+        }
+        if self.can_white_castle_queen_side {
+            fen.push('Q');
+        }
+        if self.can_black_castle_king_side {
+            fen.push('k');
+        }
+        if self.can_black_castle_queen_side {
+            fen.push('q');
+        }
+        let cant_castle = !self.can_white_castle_king_side
+            && !self.can_white_castle_queen_side
+            && !self.can_black_castle_king_side
+            && !self.can_black_castle_queen_side;
+        if cant_castle {
+            fen.push('-');
+        }
+
+        // Write en pessant square
+        fen.push(' ');
+        match self.en_pessant_square {
+            None => {
+                fen.push('-');
+            }
+            Some(square) => fen.push_str(&square_to_algebraic(square)),
+        }
+
+        // Write half and full move counts.
+        fen.push(' ');
+        fen.push(char::from_digit(self.half_move_clock, 10).unwrap());
+        fen.push(' ');
+        fen.push(char::from_digit(self.full_move_counter, 10).unwrap());
+
+        fen
+    }
 
     /// Clear a square within the board.
-    fn clear(&mut self, square: Square);
+    pub fn clear(&mut self, square: Square) {
+        self.place(Piece::Null, square);
+    }
 
     /// Place a [Piece] within the board.
-    fn place(&mut self, piece: Piece, at: Square);
+    pub fn place(&mut self, piece: Piece, at: Square) {
+        self.pieces[at as usize] = piece;
+    }
 
-    /// Applies a move to the board with _no_ validation.
-    fn apply(&mut self, r#move: Move);
+    /// Applies a move to the board. The move is assummed to be legal.
+    pub fn apply(&mut self, r#move: Move) {
+        if let Some(p) = self.at(r#move.from) {
+            self.pieces[r#move.from as usize] = Piece::Null;
+            self.pieces[r#move.to as usize] = p;
+
+            if p == Piece::PawnWhite || p == Piece::PawnBlack {
+                self.half_move_clock = 0;
+            } else {
+                self.half_move_clock += 1;
+            }
+
+            self.white_to_move = !self.white_to_move;
+            if self.white_to_move {
+                self.full_move_counter += 1;
+            }
+        }
+    }
 
     /// Lookup what piece is at a particular square in the board.
-    fn at(&self, square: Square) -> Option<Piece>;
+    pub fn at(&self, square: Square) -> Option<Piece> {
+        self.pieces.get(square as usize).copied()
+    }
 
     /// Is it whites turn to move?
-    fn white_to_move(&self) -> bool;
+    pub fn white_to_move(&self) -> bool {
+        self.white_to_move
+    }
 
     /// Generate all [Move]s possible within the current [Board].
-    fn generate_moves(&self) -> Vec<Move> {
+    pub fn generate_moves(&self) -> Vec<Move> {
         let mut moves = Vec::new();
 
         for rank in (0..8).rev() {
@@ -56,8 +273,9 @@ pub trait Board: PartialEq + Eq + Clone + Copy + Display {
 }
 
 /// Generate the valid moves for a particular piece on a certain square within a board.
-fn generate_piece_moves<T: Board>(board: &T, piece: Piece, at: Square) -> Vec<Square> {
+fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> {
     match piece {
+        Piece::Null => Vec::new(),
         Piece::PawnWhite | Piece::PawnBlack => {
             // TODO: en pessant!
             let rank = at as i8 / 8;
@@ -177,7 +395,7 @@ fn generate_piece_moves<T: Board>(board: &T, piece: Piece, at: Square) -> Vec<Sq
     }
 }
 
-fn orthogonal_moves<T: Board>(board: &T, piece: Piece, at: Square) -> Vec<Square> {
+fn orthogonal_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> {
     let rank = at / 8;
     let file = at % 8;
 
@@ -242,7 +460,7 @@ fn orthogonal_moves<T: Board>(board: &T, piece: Piece, at: Square) -> Vec<Square
     moves
 }
 
-fn diagonal_moves<T: Board>(board: &T, piece: Piece, at: Square) -> Vec<Square> {
+fn diagonal_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> {
     let mut moves = Vec::new();
     let rank = at / 8;
     let file = at % 8;
@@ -268,4 +486,25 @@ fn diagonal_moves<T: Board>(board: &T, piece: Piece, at: Square) -> Vec<Square> 
     }
 
     moves
+}
+
+impl Display for Board {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut out = String::with_capacity(1028); // make sure the string has capacity for the board string.
+        out.push_str("   -----------------\n");
+
+        for r in (0..8).rev() {
+            out.push_str(format!("{} | ", r + 1).as_str());
+            for f in 0..8 {
+                let square = r * 8 + f;
+                match self.at(square) {
+                    None => out.push_str("  "),
+                    Some(piece) => out.push_str(format!("{} ", piece).as_str()),
+                }
+            }
+            out.push_str("|\n");
+        }
+        out.push_str("   -----------------\n    a b c d e f g h");
+        write!(f, "{}", out)
+    }
 }
