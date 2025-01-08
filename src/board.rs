@@ -112,8 +112,6 @@ impl Board {
         board.half_move_clock = fields[4].parse::<u32>().unwrap();
         board.full_move_counter = fields[5].parse::<u32>().unwrap();
 
-        // TODO: Read the rest of the FEN string.
-
         board
     }
 
@@ -214,16 +212,31 @@ impl Board {
 
     /// Applies a move to the board. The move is assummed to be legal.
     pub fn apply(&mut self, r#move: Move) {
+        let is_capture = !self.is_empty(r#move.to);
         if let Some(p) = self.at(r#move.from) {
             self.pieces[r#move.from as usize] = Piece::Null;
             self.pieces[r#move.to as usize] = p;
 
-            if p == Piece::PawnWhite || p == Piece::PawnBlack {
+            // Set the half clock.
+            let is_pawn_move = p == Piece::PawnWhite || p == Piece::PawnBlack;
+            if is_pawn_move || is_capture {
                 self.half_move_clock = 0;
             } else {
                 self.half_move_clock += 1;
             }
 
+            // Set en pessant square.
+            if is_pawn_move {
+                if (r#move.to - r#move.from) == 16 {
+                    self.en_pessant_square = Some(r#move.from + 8);
+                }
+            } else {
+                self.en_pessant_square = None;
+            }
+
+            // TODO: Update castling rights.
+
+            // Update whose turn it is, and increment the move counter if needed.
             self.white_to_move = !self.white_to_move;
             if self.white_to_move {
                 self.full_move_counter += 1;
@@ -234,6 +247,13 @@ impl Board {
     /// Lookup what piece is at a particular square in the board.
     pub fn at(&self, square: Square) -> Option<Piece> {
         self.pieces.get(square as usize).copied()
+    }
+
+    /// Check if a certain square is empty.
+    pub fn is_empty(&self, square: Square) -> bool {
+        self.pieces
+            .get(square as usize)
+            .is_some_and(|other| *other == Piece::Null)
     }
 
     /// Is it whites turn to move?
@@ -288,7 +308,7 @@ fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> 
             // A pawn may move one square towards the opposing player.
             let new_rank = rank + direction;
             let mut candidates = if new_rank < 8 && new_rank > 0 {
-                vec![(rank + direction) * 8 + file]
+                vec![new_rank * 8 + file]
             } else {
                 vec![]
             };
@@ -301,7 +321,7 @@ fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> 
             let moves = candidates
                 .into_iter()
                 .filter_map(to_board_square)
-                .filter(|&square| board.at(square).is_none());
+                .filter(|&square| board.is_empty(square));
 
             // A pawn may capture diagonally.
             let captures = [
@@ -311,7 +331,7 @@ fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> 
             .into_iter()
             .filter_map(to_board_square)
             .filter(|&square| match board.at(square) {
-                Some(other) if other.is_white() != piece.is_white() => true,
+                Some(other) if other != Piece::Null && other.is_white() != piece.is_white() => true,
                 _ => false,
             });
 
@@ -347,8 +367,8 @@ fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> 
             })
             // A knight may land on a square with a opposite colored piece or no piece.
             .filter(|&square| match board.at(square) {
+                Some(Piece::Null) => true,
                 Some(other) if other.is_white() != piece.is_white() => true,
-                None => true,
                 _ => false,
             })
             .collect()

@@ -65,7 +65,7 @@ impl Piece {
 
     /// Tells wether this piece is white.
     pub fn is_white(&self) -> bool {
-        *self as u8 != 0 && *self as u8 >> 1 < 1
+        *self as u8 != 0 && *self as u8 >> 2 < 1
     }
 }
 
@@ -133,7 +133,7 @@ pub fn square_from_algebraic(long_algebraic: &str) -> Square {
 }
 
 /// A move between two squares.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct Move {
     pub from: Square,
     pub to: Square,
@@ -148,5 +148,16 @@ impl Move {
         let from = square_from_algebraic(&long_algebraic[0..2]);
         let to = square_from_algebraic(&long_algebraic[2..4]);
         Move { from, to }
+    }
+}
+
+impl Display for Move {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}{}",
+            square_to_algebraic(self.from),
+            square_to_algebraic(self.to)
+        )
     }
 }
