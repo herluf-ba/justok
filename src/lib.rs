@@ -5,7 +5,6 @@ pub mod board;
 /// Every type of piece in chess.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum Piece {
-    Null = 0,
     PawnWhite = 1,
     KnightWhite = 2,
     BishopWhite = 3,
@@ -59,7 +58,6 @@ impl Piece {
             Self::KingWhite => 'K',
             Self::QueenBlack => 'q',
             Self::QueenWhite => 'Q',
-            _ => ' ',
         }
     }
 
@@ -75,7 +73,6 @@ impl Display for Piece {
             f,
             "{}",
             match self {
-                Piece::Null => " ",
                 Piece::PawnWhite => "♙",
                 Piece::PawnBlack => "♟︎",
                 Piece::KnightWhite => "♘",

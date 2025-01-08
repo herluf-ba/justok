@@ -4,7 +4,7 @@ use crate::{square_from_algebraic, square_to_algebraic, to_board_square, Move, P
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub struct Board {
-    pieces: [Piece; 64],
+    pieces: [Option<Piece>; 64],
     white_to_move: bool,
     en_pessant_square: Option<Square>,
     can_white_castle_king_side: bool,
@@ -19,7 +19,7 @@ impl Board {
     /// Create a new chess board with no pieces placed.
     pub fn blank() -> Self {
         Self {
-            pieces: [Piece::Null; 64],
+            pieces: [None; 64],
             white_to_move: true,
             en_pessant_square: None,
             can_white_castle_king_side: true,
@@ -133,7 +133,7 @@ impl Board {
             let mut consequitive_empty = 0;
             for f in 0..8 {
                 match self.at(r * 8 + f) {
-                    Some(Piece::Null) => {
+                    None => {
                         consequitive_empty += 1;
                     }
                     Some(piece) => {
@@ -143,7 +143,6 @@ impl Board {
                         }
                         fen.push(piece.to_char())
                     }
-                    _ => {}
                 }
             }
             if consequitive_empty > 0 {
@@ -200,22 +199,17 @@ impl Board {
         fen
     }
 
-    /// Clear a square within the board.
-    pub fn clear(&mut self, square: Square) {
-        self.place(Piece::Null, square);
-    }
-
-    /// Place a [Piece] within the board.
-    pub fn place(&mut self, piece: Piece, at: Square) {
-        self.pieces[at as usize] = piece;
+    /// Place a [Piece] within the board without updating any other state.
+    fn place(&mut self, piece: Piece, at: Square) {
+        self.pieces[at as usize] = Some(piece);
     }
 
     /// Applies a move to the board. The move is assummed to be legal.
     pub fn apply(&mut self, r#move: Move) {
-        let is_capture = !self.is_empty(r#move.to);
+        let is_capture = self.at(r#move.to).is_some();
         if let Some(p) = self.at(r#move.from) {
-            self.pieces[r#move.from as usize] = Piece::Null;
-            self.pieces[r#move.to as usize] = p;
+            self.pieces[r#move.from as usize] = None;
+            self.pieces[r#move.to as usize] = Some(p);
 
             // Set the half clock.
             let is_pawn_move = p == Piece::PawnWhite || p == Piece::PawnBlack;
@@ -246,14 +240,7 @@ impl Board {
 
     /// Lookup what piece is at a particular square in the board.
     pub fn at(&self, square: Square) -> Option<Piece> {
-        self.pieces.get(square as usize).copied()
-    }
-
-    /// Check if a certain square is empty.
-    pub fn is_empty(&self, square: Square) -> bool {
-        self.pieces
-            .get(square as usize)
-            .is_some_and(|other| *other == Piece::Null)
+        *self.pieces.get(square as usize)?
     }
 
     /// Is it whites turn to move?
@@ -295,7 +282,6 @@ impl Board {
 /// Generate the valid moves for a particular piece on a certain square within a board.
 fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> {
     match piece {
-        Piece::Null => Vec::new(),
         Piece::PawnWhite | Piece::PawnBlack => {
             // TODO: en pessant!
             let rank = at as i8 / 8;
@@ -321,7 +307,7 @@ fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> 
             let moves = candidates
                 .into_iter()
                 .filter_map(to_board_square)
-                .filter(|&square| board.is_empty(square));
+                .filter(|&square| board.at(square).is_none());
 
             // A pawn may capture diagonally.
             let captures = [
@@ -331,7 +317,7 @@ fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> 
             .into_iter()
             .filter_map(to_board_square)
             .filter(|&square| match board.at(square) {
-                Some(other) if other != Piece::Null && other.is_white() != piece.is_white() => true,
+                Some(other) if other.is_white() != piece.is_white() => true,
                 _ => false,
             });
 
@@ -367,7 +353,7 @@ fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> 
             })
             // A knight may land on a square with a opposite colored piece or no piece.
             .filter(|&square| match board.at(square) {
-                Some(Piece::Null) => true,
+                None => true,
                 Some(other) if other.is_white() != piece.is_white() => true,
                 _ => false,
             })
