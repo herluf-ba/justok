@@ -17,8 +17,8 @@ fn format_moves(board: &Board, moves: &Vec<Move>) -> Vec<String> {
 }
 
 fn main() {
-    let standard = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq e3 0 1";
-    let board = Board::from_fen(standard);
+    let fen = "r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R b - - 11 7";
+    let board = Board::from_fen(fen);
     println!("{board}");
     let moves = board.generate_moves();
     let formatted = format_moves(&board, &moves).join(", ");

@@ -87,18 +87,10 @@ impl Board {
 
         // Read castling rights.
         let castling = fields[2];
-        if castling.contains("K") {
-            board.can_white_castle_king_side = true;
-        }
-        if castling.contains("Q") {
-            board.can_white_castle_queen_side = true;
-        }
-        if castling.contains("k") {
-            board.can_black_castle_king_side = true;
-        }
-        if castling.contains("q") {
-            board.can_black_castle_queen_side = true;
-        }
+        board.can_white_castle_king_side = castling.contains("K");
+        board.can_white_castle_queen_side = castling.contains("Q");
+        board.can_black_castle_king_side = castling.contains("k");
+        board.can_black_castle_queen_side = castling.contains("q");
 
         // Read en pessant square.
         match fields[3] {
@@ -189,12 +181,11 @@ impl Board {
             }
             Some(square) => fen.push_str(&square_to_algebraic(square)),
         }
-
         // Write half and full move counts.
         fen.push(' ');
-        fen.push(char::from_digit(self.half_move_clock, 10).unwrap());
+        fen.push_str(self.half_move_clock.to_string().as_str());
         fen.push(' ');
-        fen.push(char::from_digit(self.full_move_counter, 10).unwrap());
+        fen.push_str(self.full_move_counter.to_string().as_str());
 
         fen
     }
@@ -221,14 +212,20 @@ impl Board {
 
             // Set en pessant square.
             if is_pawn_move {
-                if (r#move.to - r#move.from) == 16 {
-                    self.en_pessant_square = Some(r#move.from + 8);
+                self.en_pessant_square = match r#move.to as i8 - r#move.from as i8 {
+                    16 => Some(r#move.from + 8),
+                    -16 => Some(r#move.from - 8),
+                    _ => None,
                 }
             } else {
                 self.en_pessant_square = None;
             }
 
-            // TODO: Update castling rights.
+            // Update castling rights
+            self.can_white_castle_queen_side &= !(p == Piece::KingWhite || r#move.from == 0);
+            self.can_white_castle_king_side &= !(p == Piece::KingWhite || r#move.from == 7);
+            self.can_black_castle_queen_side &= !(p == Piece::KingBlack || r#move.from == 56);
+            self.can_black_castle_king_side &= !(p == Piece::KingBlack || r#move.from == 63);
 
             // Update whose turn it is, and increment the move counter if needed.
             self.white_to_move = !self.white_to_move;
@@ -243,11 +240,6 @@ impl Board {
         *self.pieces.get(square as usize)?
     }
 
-    /// Is it whites turn to move?
-    pub fn white_to_move(&self) -> bool {
-        self.white_to_move
-    }
-
     /// Generate all [Move]s possible within the current [Board].
     pub fn generate_moves(&self) -> Vec<Move> {
         let mut moves = Vec::new();
@@ -257,7 +249,7 @@ impl Board {
                 let square = rank * 8 + file;
                 match self.at(square) {
                     // Square had a piece with the color whose turn it is
-                    Some(piece) if self.white_to_move() == piece.is_white() => {
+                    Some(piece) if self.white_to_move == piece.is_white() => {
                         let valid_target_squares = generate_piece_moves(self, piece, square);
                         let mut piece_moves: Vec<Move> = valid_target_squares
                             .iter()
@@ -283,49 +275,71 @@ impl Board {
 fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> {
     match piece {
         Piece::PawnWhite | Piece::PawnBlack => {
-            // TODO: en pessant!
-            let rank = at as i8 / 8;
-            let file = at as i8 % 8;
-            let direction: i8 = match piece.is_white() {
-                true => 1,
-                false => -1,
-            };
+            let rank = at as u8 / 8;
+            let file = at as u8 % 8;
+
+            let mut moves: Vec<Square> = vec![];
 
             // A pawn may move one square towards the opposing player.
-            let new_rank = rank + direction;
-            let mut candidates = if new_rank < 8 && new_rank > 0 {
-                vec![new_rank * 8 + file]
-            } else {
-                vec![]
+            let advance_square = match piece.is_white() {
+                true if rank < 8 => Some((rank + 1) * 8 + file),
+                false if rank > 0 => Some((rank - 1) * 8 + file),
+                _ => None,
             };
+
             // If it is in it's starting rank, it may leap two squares.
-            match (piece.is_white(), rank) {
-                (true, 1) | (false, 6) => candidates.push((rank + 2 * direction) * 8 + file),
-                _ => {}
+            let leap_square = match piece.is_white() {
+                true if rank == 1 => Some((rank + 2) * 8 + file),
+                false if rank == 6 => Some((rank - 2) * 8 + file),
+                _ => None,
             };
-            // Filter off squares where another piece of any color resides (pawns capture diagonally).
-            let moves = candidates
-                .into_iter()
-                .filter_map(to_board_square)
-                .filter(|&square| board.at(square).is_none());
+
+            if advance_square.is_some_and(|s| board.at(s).is_none()) {
+                moves.push(advance_square.unwrap());
+                if leap_square.is_some_and(|s| board.at(s).is_none()) {
+                    moves.push(leap_square.unwrap());
+                }
+            }
 
             // A pawn may capture diagonally.
-            let captures = [
-                (rank + direction) * 8 + file + 1,
-                (rank + direction) * 8 + file - 1,
-            ]
-            .into_iter()
-            .filter_map(to_board_square)
-            .filter(|&square| match board.at(square) {
-                Some(other) if other.is_white() != piece.is_white() => true,
-                _ => false,
-            });
+            let capture_l = match piece.is_white() {
+                true if rank < 8 && file > 1 => Some((rank + 1) * 8 + file - 1),
+                false if rank > 0 && file > 1 => Some((rank - 1) * 8 + file - 1),
+                _ => None,
+            };
 
-            moves.chain(captures).collect()
+            let can_capture_l = capture_l.map(|s| {
+                let sees_enemy_piece = matches!(
+                    board.at(s),
+                    Some(other) if other.is_white() != piece.is_white()
+                );
+                let en_pessant = board.en_pessant_square.is_some_and(|es| es == s);
+                sees_enemy_piece || en_pessant
+            }) == Some(true);
+            if can_capture_l {
+                moves.push(capture_l.unwrap());
+            }
+            let capture_r = match piece.is_white() {
+                true if rank < 8 && file < 7 => Some((rank + 1) * 8 + file + 1),
+                false if rank > 0 && file < 7 => Some((rank - 1) * 8 + file + 1),
+                _ => None,
+            };
+            let can_capture_r = capture_r.map(|s| {
+                let sees_enemy_piece = matches!(
+                    board.at(s),
+                    Some(other) if other.is_white() != piece.is_white()
+                );
+                let en_pessant = board.en_pessant_square.is_some_and(|es| es == s);
+                sees_enemy_piece || en_pessant
+            }) == Some(true);
+
+            if can_capture_r {
+                moves.push(capture_r.unwrap());
+            }
+
+            moves
         }
         Piece::KnightWhite | Piece::KnightBlack => {
-            let rank = at as i8 / 8;
-            let file = at as i8 % 8;
             // Knights may move two squares orthogonally and then one square along the other orthogonal axis.
             // That comes out to 8 unique squares to land on.
             // . x . x .
@@ -333,24 +347,21 @@ fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> 
             // . . n . .
             // x . . . x
             // . x . x .
+            let rank = at as i8 / 8;
+            let file = at as i8 % 8;
             [
-                (rank < 6 && file < 7, (rank + 2) * 8 + file + 1),
-                (rank < 6 && file > 0, (rank + 2) * 8 + file - 1),
-                (rank > 2 && file < 7, (rank - 2) * 8 + file + 1),
-                (rank > 2 && file > 0, (rank - 2) * 8 + file - 1),
-                (rank < 7 && file > 2, (rank + 1) * 8 + file - 2),
-                (rank > 0 && file > 2, (rank - 1) * 8 + file - 2),
-                (rank < 7 && file < 6, (rank + 1) * 8 + file + 2),
-                (rank > 0 && file < 6, (rank - 1) * 8 + file + 2),
+                (rank + 2, file + 1),
+                (rank + 2, file - 1),
+                (rank - 2, file + 1),
+                (rank - 2, file - 1),
+                (rank + 1, file + 2),
+                (rank + 1, file - 2),
+                (rank - 1, file + 2),
+                (rank - 1, file - 2),
             ]
             .into_iter()
-            // filter off the squares outside the board
-            .filter_map(|(has_space, square)| {
-                has_space
-                    .then_some(square)
-                    .map(|s| u8::try_from(s).ok())
-                    .flatten()
-            })
+            .filter(|(r, f)| !(*r > 7 || *f > 7 || *r < 0 || *f < 0))
+            .map(|(r, f)| to_board_square(r * 8 + f).unwrap())
             // A knight may land on a square with a opposite colored piece or no piece.
             .filter(|&square| match board.at(square) {
                 None => true,
@@ -363,25 +374,19 @@ fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> 
             // The king may move to any surrounding square.
             let rank = at as i8 / 8;
             let file = at as i8 % 8;
-            let (left, right, top, bottom) = (file > 0, file < 7, rank < 7, rank > 0);
             [
-                (top && right, (rank + 1) * 8 + file + 1),
-                (top && left, (rank + 1) * 8 + file - 1),
-                (top, (rank + 1) * 8 + file),
-                (left, rank * 8 + file - 1),
-                (right, rank * 8 + file + 1),
-                (bottom && right, (rank - 1) * 8 + file + 1),
-                (bottom && left, (rank - 1) * 8 + file - 1),
-                (bottom, (rank - 1) * 8 + file),
+                (rank + 1, file + 1),
+                (rank + 1, file),
+                (rank + 1, file - 1),
+                (rank - 1, file + 1),
+                (rank - 1, file),
+                (rank - 1, file - 1),
+                (rank, file + 1),
+                (rank, file - 1),
             ]
             .into_iter()
-            // filter off the squares outside the board
-            .filter_map(|(has_space, square)| {
-                has_space
-                    .then_some(square)
-                    .map(|s| u8::try_from(s).ok())
-                    .flatten()
-            })
+            .filter(|(r, f)| !(*r > 7 || *f > 7 || *r < 0 || *f < 0))
+            .map(|(r, f)| to_board_square(r * 8 + f).unwrap())
             // The king may land on a square with a opposite colored piece or no piece.
             .filter(|&square| match board.at(square) {
                 Some(other) if other.is_white() != piece.is_white() => true,
@@ -390,104 +395,54 @@ fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> 
             })
             .collect()
         }
-        Piece::RookWhite | Piece::RookBlack => orthogonal_moves(board, piece, at),
-        Piece::BishopWhite | Piece::BishopBlack => diagonal_moves(board, piece, at),
+        Piece::RookWhite | Piece::RookBlack => {
+            let directions = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+            sliding_moves(&directions, board, piece, at)
+        }
+        Piece::BishopWhite | Piece::BishopBlack => {
+            let directions = [(1, 1), (-1, -1), (-1, 1), (1, -1)];
+            sliding_moves(&directions, board, piece, at)
+        }
         Piece::QueenWhite | Piece::QueenBlack => {
-            let mut moves = orthogonal_moves(board, piece, at);
-            let diagonal = diagonal_moves(board, piece, at);
-            moves.extend(diagonal);
-            moves
+            let directions = [
+                (1, 0),
+                (-1, 0),
+                (0, 1),
+                (0, -1),
+                (1, 1),
+                (-1, -1),
+                (-1, 1),
+                (1, -1),
+            ];
+            sliding_moves(&directions, board, piece, at)
         }
     }
 }
 
-fn orthogonal_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> {
-    let rank = at / 8;
-    let file = at % 8;
-
-    let mut moves = Vec::new();
-    for f in (0..file).rev() {
-        let square = rank * 8 + f;
-        match board.at(square) {
-            Some(other) => {
-                if other.is_white() != piece.is_white() {
-                    moves.push(square)
-                }
+/// Helper function for computing sliding moves in both orthogonal and diagonal directions.
+fn sliding_moves(directions: &[(i8, i8)], board: &Board, piece: Piece, at: Square) -> Vec<Square> {
+    let mut moves: Vec<Square> = Vec::new();
+    let rank = at as i8 / 8;
+    let file = at as i8 % 8;
+    for (ro, fo) in directions {
+        let mut r = rank;
+        let mut f = file;
+        loop {
+            r += ro;
+            f += fo;
+            if r > 7 || f > 7 || r < 0 || f < 0 {
                 break;
             }
-            None => {
-                moves.push(square);
-            }
-        }
-    }
-    for f in (file + 1)..8 {
-        let square = rank * 8 + f;
-        match board.at(square) {
-            Some(other) => {
-                if other.is_white() != piece.is_white() {
-                    moves.push(square)
+            let square = to_board_square(r * 8 + f).unwrap();
+            match board.at(square) {
+                None => moves.push(square),
+                Some(other) => {
+                    if other.is_white() != piece.is_white() {
+                        moves.push(square)
+                    }
+                    break;
                 }
-                break;
             }
-            None => {
-                moves.push(square);
-            }
-        }
-    }
-    for r in (0..rank).rev() {
-        let square = r * 8 + file;
-        match board.at(square) {
-            Some(other) => {
-                if other.is_white() != piece.is_white() {
-                    moves.push(square)
-                }
-                break;
-            }
-            None => {
-                moves.push(square);
-            }
-        }
-    }
-    for r in (rank + 1)..8 {
-        let square = r * 8 + file;
-        match board.at(square) {
-            Some(other) => {
-                if other.is_white() != piece.is_white() {
-                    moves.push(square)
-                }
-                break;
-            }
-            None => {
-                moves.push(square);
-            }
-        }
-    }
-
-    moves
-}
-
-fn diagonal_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> {
-    let mut moves = Vec::new();
-    let rank = at / 8;
-    let file = at % 8;
-
-    let mut r = rank;
-    let mut f = file;
-    loop {
-        r += 1;
-        f += 1;
-        if r > 7 || f > 7 {
-            break;
-        }
-        let square = r * 8 + f;
-        match board.at(square) {
-            Some(other) => {
-                if other.is_white() != piece.is_white() {
-                    moves.push(square)
-                }
-                break;
-            }
-            None => moves.push(square),
         }
     }
 

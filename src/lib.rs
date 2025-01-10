@@ -63,7 +63,7 @@ impl Piece {
 
     /// Tells wether this piece is white.
     pub fn is_white(&self) -> bool {
-        *self as u8 != 0 && *self as u8 >> 2 < 1
+        *self as u8 != 0 && *self as u8 >> 3 < 1
     }
 }
 
