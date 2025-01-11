@@ -197,6 +197,7 @@ impl Board {
 
     /// Applies a move to the board. The move is assummed to be legal.
     pub fn apply(&mut self, r#move: Move) {
+        // TODO: Detect en-pessant captures.
         let is_capture = self.at(r#move.to).is_some();
         if let Some(p) = self.at(r#move.from) {
             self.pieces[r#move.from as usize] = None;
