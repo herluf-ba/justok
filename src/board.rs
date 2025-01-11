@@ -240,8 +240,39 @@ impl Board {
         *self.pieces.get(square as usize)?
     }
 
-    /// Generate all [Move]s possible within the current [Board].
+    /// Generate all legal [Move]s possible within the current [Board].
     pub fn generate_moves(&self) -> Vec<Move> {
+        let pseudo_legal = self.generate_pseudo_moves();
+        pseudo_legal
+            .into_iter()
+            .filter(|&m| {
+                // Check to see if the move is legal,
+                // by applying it to the board and check if
+                // the opponent can capture the king on the next move.
+                // If so, the move would leave the king in check.
+                // Note: This is highly inefficient but it is correct.
+                let mut b = (*self).clone();
+                b.apply(m);
+                let king_pos = b
+                    .pieces
+                    .iter()
+                    .position(|p| match p {
+                        Some(Piece::KingWhite) if self.white_to_move => true,
+                        Some(Piece::KingBlack) if !self.white_to_move => true,
+                        _ => false,
+                    })
+                    .unwrap();
+                b.generate_pseudo_moves()
+                    .into_iter()
+                    .find(|&m| m.to as usize == king_pos)
+                    .is_none()
+            })
+            .collect()
+    }
+
+    /// Generate all pseudo-legal [Move]s possible within the current [Board].
+    /// A pseudo legal move may leave the player in check.
+    pub fn generate_pseudo_moves(&self) -> Vec<Move> {
         let mut moves = Vec::new();
 
         for rank in (0..8).rev() {
@@ -260,7 +291,6 @@ impl Board {
                             .collect();
                         moves.append(&mut piece_moves);
                     }
-
                     // Square was empty, or had the wrong color piece.
                     _ => continue,
                 }
@@ -275,8 +305,8 @@ impl Board {
 fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> {
     match piece {
         Piece::PawnWhite | Piece::PawnBlack => {
-            let rank = at as u8 / 8;
-            let file = at as u8 % 8;
+            let rank = at / 8;
+            let file = at % 8;
 
             let mut moves: Vec<Square> = vec![];
 
