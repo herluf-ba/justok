@@ -197,7 +197,6 @@ impl Board {
 
     /// Applies a move to the board. The move is assummed to be legal.
     pub fn apply(&mut self, r#move: Move) {
-        // TODO: Detect en-pessant captures.
         let is_capture = self.at(r#move.to).is_some();
         if let Some(p) = self.at(r#move.from) {
             self.pieces[r#move.from as usize] = None;
@@ -209,6 +208,16 @@ impl Board {
                 self.half_move_clock = 0;
             } else {
                 self.half_move_clock += 1;
+            }
+
+            // Capture en-pessant
+            if is_pawn_move && (r#move.from % 8) != (r#move.to % 8) {
+                // A pawn changed file, this only happens by en pessant.
+                let captured_pawn_square = match self.white_to_move {
+                    true => r#move.to - 8,
+                    false => r#move.to + 8,
+                };
+                self.pieces[captured_pawn_square as usize] = None;
             }
 
             // Set en pessant square.
