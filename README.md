@@ -34,3 +34,26 @@ Establish some methods for measuring key metrics of the engine. Here's some numb
 
 Setup fastchess-cli to play matches agaist different versions of justok.
 Implement a _barely better move selection than random_ (maybe value captures higher?) and see if that version performs better.
+
+
+
+### Some ideas
+
+Chrona - The Timetraveling Tinkerer
+Chrona is a small female mad scientist, that builds robots that fight for her.
+At some point, Chrona discovered how to time-travel, albeit somewhat unrealiably. 
+Every once in a while this lets her _have an extra turn_.
+
+
+Fredrick - The Profesional 
+Fredrick is a pro chess player who has been studying the game since childhood.
+While Fredrick never smiles but he claims he feels joy now and then.
+His deep understanding of the game lets him _see the best move in a position_ once in a while.
+
+
+Golem - The Ancient
+Golem is a sentient rock creature that brings life to it's surroundings.
+
+
+- The Witch
+

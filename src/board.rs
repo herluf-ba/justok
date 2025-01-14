@@ -200,7 +200,7 @@ impl Board {
         let is_capture = self.at(r#move.to).is_some();
         if let Some(p) = self.at(r#move.from) {
             self.pieces[r#move.from as usize] = None;
-            self.pieces[r#move.to as usize] = Some(p);
+            self.pieces[r#move.to as usize] = r#move.promote_to.or(Some(p));
 
             // Set the half clock.
             let is_pawn_move = p == Piece::PawnWhite || p == Piece::PawnBlack;
@@ -211,8 +211,9 @@ impl Board {
             }
 
             // Capture en-pessant
-            if is_pawn_move && (r#move.from % 8) != (r#move.to % 8) {
-                // A pawn changed file, this only happens by en pessant.
+            let changed_file = (r#move.from % 8) != (r#move.to % 8);
+            if is_pawn_move && changed_file && !is_capture {
+                // A pawn changed file without doing a capture. This only happens by en pessant.
                 let captured_pawn_square = match self.white_to_move {
                     true => r#move.to - 8,
                     false => r#move.to + 8,
@@ -229,6 +230,37 @@ impl Board {
                 }
             } else {
                 self.en_pessant_square = None;
+            }
+
+            // Move the rook when a player castles.
+            match (p, r#move) {
+                (Piece::KingWhite, Move { from: 4, to: 2, .. }) => {
+                    self.pieces[0] = None;
+                    self.pieces[3] = Some(Piece::RookWhite);
+                }
+                (Piece::KingWhite, Move { from: 4, to: 6, .. }) => {
+                    self.pieces[7] = None;
+                    self.pieces[5] = Some(Piece::RookWhite);
+                }
+                (
+                    Piece::KingBlack,
+                    Move {
+                        from: 60, to: 62, ..
+                    },
+                ) => {
+                    self.pieces[63] = None;
+                    self.pieces[61] = Some(Piece::RookBlack);
+                }
+                (
+                    Piece::KingBlack,
+                    Move {
+                        from: 60, to: 58, ..
+                    },
+                ) => {
+                    self.pieces[56] = None;
+                    self.pieces[59] = Some(Piece::RookBlack);
+                }
+                _ => {}
             }
 
             // Update castling rights
@@ -250,33 +282,34 @@ impl Board {
         *self.pieces.get(square as usize)?
     }
 
+    /// Does this move leave the current player in check?
+    /// The check is performed by applying the move,
+    /// then generating opponent pseudo-legal moves and checking
+    /// if the king may then be captured.
+    /// This is inefficient but at least correct.
+    fn would_leave_in_check(&self, r#move: Move) -> bool {
+        let mut b = (*self).clone();
+        b.apply(r#move);
+        let king_pos = b
+            .pieces
+            .iter()
+            .position(|p| match p {
+                Some(Piece::KingWhite) if self.white_to_move => true,
+                Some(Piece::KingBlack) if !self.white_to_move => true,
+                _ => false,
+            })
+            .unwrap();
+        b.generate_pseudo_moves()
+            .into_iter()
+            .find(|&m| m.to as usize == king_pos)
+            .is_some()
+    }
+
     /// Generate all legal [Move]s possible within the current [Board].
     pub fn generate_moves(&self) -> Vec<Move> {
-        let pseudo_legal = self.generate_pseudo_moves();
-        pseudo_legal
+        self.generate_pseudo_moves()
             .into_iter()
-            .filter(|&m| {
-                // Check to see if the move is legal,
-                // by applying it to the board and check if
-                // the opponent can capture the king on the next move.
-                // If so, the move would leave the king in check.
-                // Note: This is highly inefficient but it is correct.
-                let mut b = (*self).clone();
-                b.apply(m);
-                let king_pos = b
-                    .pieces
-                    .iter()
-                    .position(|p| match p {
-                        Some(Piece::KingWhite) if self.white_to_move => true,
-                        Some(Piece::KingBlack) if !self.white_to_move => true,
-                        _ => false,
-                    })
-                    .unwrap();
-                b.generate_pseudo_moves()
-                    .into_iter()
-                    .find(|&m| m.to as usize == king_pos)
-                    .is_none()
-            })
+            .filter(|&m| !self.would_leave_in_check(m))
             .collect()
     }
 
@@ -292,13 +325,7 @@ impl Board {
                     // Square had a piece with the color whose turn it is
                     Some(piece) if self.white_to_move == piece.is_white() => {
                         let valid_target_squares = generate_piece_moves(self, piece, square);
-                        let mut piece_moves: Vec<Move> = valid_target_squares
-                            .iter()
-                            .map(|target| Move {
-                                from: square,
-                                to: *target,
-                            })
-                            .collect();
+                        let mut piece_moves: Vec<Move> = valid_target_squares;
                         moves.append(&mut piece_moves);
                     }
                     // Square was empty, or had the wrong color piece.
@@ -312,13 +339,13 @@ impl Board {
 }
 
 /// Generate the valid moves for a particular piece on a certain square within a board.
-fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> {
+fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Move> {
     match piece {
         Piece::PawnWhite | Piece::PawnBlack => {
             let rank = at / 8;
             let file = at % 8;
 
-            let mut moves: Vec<Square> = vec![];
+            let mut moves: Vec<Move> = vec![];
 
             // A pawn may move one square towards the opposing player.
             let advance_square = match piece.is_white() {
@@ -335,16 +362,16 @@ fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> 
             };
 
             if advance_square.is_some_and(|s| board.at(s).is_none()) {
-                moves.push(advance_square.unwrap());
+                moves.push(Move::new(at, advance_square.unwrap()));
                 if leap_square.is_some_and(|s| board.at(s).is_none()) {
-                    moves.push(leap_square.unwrap());
+                    moves.push(Move::new(at, leap_square.unwrap()));
                 }
             }
 
             // A pawn may capture diagonally.
             let capture_l = match piece.is_white() {
-                true if rank < 8 && file > 1 => Some((rank + 1) * 8 + file - 1),
-                false if rank > 0 && file > 1 => Some((rank - 1) * 8 + file - 1),
+                true if rank < 8 && file > 0 => Some((rank + 1) * 8 + file - 1),
+                false if rank > 0 && file > 0 => Some((rank - 1) * 8 + file - 1),
                 _ => None,
             };
 
@@ -357,7 +384,7 @@ fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> 
                 sees_enemy_piece || en_pessant
             }) == Some(true);
             if can_capture_l {
-                moves.push(capture_l.unwrap());
+                moves.push(Move::new(at, capture_l.unwrap()));
             }
             let capture_r = match piece.is_white() {
                 true if rank < 8 && file < 7 => Some((rank + 1) * 8 + file + 1),
@@ -374,10 +401,38 @@ fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> 
             }) == Some(true);
 
             if can_capture_r {
-                moves.push(capture_r.unwrap());
+                moves.push(Move::new(at, capture_r.unwrap()));
             }
 
             moves
+                .iter()
+                // Handle promotions.
+                .flat_map(|&Move { from, to, .. }| {
+                    use Piece::*;
+                    match (piece.is_white(), to / 8) {
+                        // White pawn made it to rank 8. Expand the move to all possible promotions.
+                        (true, 7) => [KnightWhite, BishopWhite, RookWhite, QueenWhite]
+                            .iter()
+                            .map(|&p| Move {
+                                from,
+                                to,
+                                promote_to: Some(p),
+                            })
+                            .collect::<Vec<Move>>(),
+                        // Black pawn made it to rank 1. Expand the move to all possible promotions.
+                        (false, 0) => [KnightBlack, BishopBlack, RookBlack, QueenBlack]
+                            .iter()
+                            .map(|&p| Move {
+                                from,
+                                to,
+                                promote_to: Some(p),
+                            })
+                            .collect::<Vec<Move>>(),
+
+                        _ => vec![Move::new(from, to)],
+                    }
+                })
+                .collect()
         }
         Piece::KnightWhite | Piece::KnightBlack => {
             // Knights may move two squares orthogonally and then one square along the other orthogonal axis.
@@ -408,13 +463,14 @@ fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> 
                 Some(other) if other.is_white() != piece.is_white() => true,
                 _ => false,
             })
+            .map(|square| Move::new(at, square))
             .collect()
         }
         Piece::KingWhite | Piece::KingBlack => {
             // The king may move to any surrounding square.
             let rank = at as i8 / 8;
             let file = at as i8 % 8;
-            [
+            let mut moves: Vec<Move> = [
                 (rank + 1, file + 1),
                 (rank + 1, file),
                 (rank + 1, file - 1),
@@ -433,7 +489,55 @@ fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> 
                 None => true,
                 _ => false,
             })
-            .collect()
+            .map(|square| Move::new(at, square))
+            .collect();
+
+            // Castling queen side for white.
+            if board.white_to_move
+                // Still has castling rights
+                && board.can_white_castle_queen_side
+                // No piece is obstructing the castling
+                && board.pieces[3].is_none() && board.pieces[2].is_none() && board.pieces[1].is_none()
+                // Check that d1 is not attacked, since the king can't castle through check.
+                && !board.would_leave_in_check(Move::new( 4, 3 ))
+            {
+                moves.push(Move::new(at, 2));
+            }
+            // Castling king side for white.
+            if board.white_to_move
+                // Still has castling rights
+                && board.can_white_castle_king_side
+                // No piece is obstructing the castling
+                && board.pieces[5].is_none() && board.pieces[6].is_none()
+                // Check that e1 is not attacked, since the king can't castle through check.
+                && !board.would_leave_in_check(Move::new( 4, 5 ))
+            {
+                moves.push(Move::new(at, 6));
+            }
+            // Castling queen side for black.
+            if !board.white_to_move
+                // Still has castling rights
+                && board.can_black_castle_queen_side
+                // No piece is obstructing the castling
+                && board.pieces[59].is_none() && board.pieces[58].is_none() && board.pieces[57].is_none()
+                // Check that d8 is not attacked, since the king can't castle through check.
+                && !board.would_leave_in_check(Move::new( 60, 59 ))
+            {
+                moves.push(Move::new(at, 58));
+            }
+            // Castling king side for black.
+            if !board.white_to_move
+                // Still has castling rights
+                && board.can_black_castle_king_side
+                // No piece is obstructing the castling
+                && board.pieces[61].is_none() && board.pieces[62].is_none()
+                // Check that e8 is not attacked, since the king can't castle through check.
+                && !board.would_leave_in_check(Move::new( 60, 61 ))
+            {
+                moves.push(Move::new(at, 62));
+            }
+
+            moves
         }
         Piece::RookWhite | Piece::RookBlack => {
             let directions = [(1, 0), (-1, 0), (0, 1), (0, -1)];
@@ -460,8 +564,8 @@ fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Square> 
 }
 
 /// Helper function for computing sliding moves in both orthogonal and diagonal directions.
-fn sliding_moves(directions: &[(i8, i8)], board: &Board, piece: Piece, at: Square) -> Vec<Square> {
-    let mut moves: Vec<Square> = Vec::new();
+fn sliding_moves(directions: &[(i8, i8)], board: &Board, piece: Piece, at: Square) -> Vec<Move> {
+    let mut moves: Vec<Move> = Vec::new();
     let rank = at as i8 / 8;
     let file = at as i8 % 8;
     for (ro, fo) in directions {
@@ -475,10 +579,10 @@ fn sliding_moves(directions: &[(i8, i8)], board: &Board, piece: Piece, at: Squar
             }
             let square = to_board_square(r * 8 + f).unwrap();
             match board.at(square) {
-                None => moves.push(square),
+                None => moves.push(Move::new(at, square)),
                 Some(other) => {
                     if other.is_white() != piece.is_white() {
-                        moves.push(square)
+                        moves.push(Move::new(at, square))
                     }
                     break;
                 }

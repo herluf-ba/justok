@@ -3,7 +3,7 @@ use std::fmt::Display;
 pub mod board;
 
 /// Every type of piece in chess.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub enum Piece {
     PawnWhite = 1,
     KnightWhite = 2,
@@ -134,9 +134,18 @@ pub fn square_from_algebraic(long_algebraic: &str) -> Square {
 pub struct Move {
     pub from: Square,
     pub to: Square,
+    pub promote_to: Option<Piece>,
 }
 
 impl Move {
+    pub fn new(from: Square, to: Square) -> Self {
+        Self {
+            from,
+            to,
+            promote_to: None,
+        }
+    }
+
     /// Read a move from long algebraic notation.
     /// Example "b1a3" -> Move { from: , to: }
     /// Will panic if the move is not valid (has rank or file outside normal chess board).
@@ -144,7 +153,16 @@ impl Move {
         assert!(long_algebraic.len() >= 4);
         let from = square_from_algebraic(&long_algebraic[0..2]);
         let to = square_from_algebraic(&long_algebraic[2..4]);
-        Move { from, to }
+        let promote_to = long_algebraic
+            .chars()
+            .nth(4)
+            .and_then(|c| Piece::from_char(&c));
+
+        Move {
+            from,
+            to,
+            promote_to,
+        }
     }
 }
 
@@ -152,9 +170,11 @@ impl Display for Move {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}{}",
+            "{}{}{}",
             square_to_algebraic(self.from),
-            square_to_algebraic(self.to)
+            square_to_algebraic(self.to),
+            self.promote_to
+                .map_or("".to_owned(), |p| p.to_char().to_string())
         )
     }
 }
