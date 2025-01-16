@@ -1,27 +1,61 @@
-// TODO:
-// - [x] Make a function for applying a move to the board
-// - [ ] Read FEN positions into bitboards.
-// - [ ] Generate a list of valid moves starting at a certain square.
+use clap::{Parser, Subcommand};
+use termchess::board::Board;
 
-use termchess::{board::Board, square_to_algebraic, Move};
+/// Command line interface for justok.
+#[derive(Debug, Parser)] // requires `derive` feature
+#[command(name = "justok")]
+#[command(about = "A chess engine that does just ok.", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
 
-fn format_moves(board: &Board, moves: &Vec<Move>) -> Vec<String> {
-    moves
-        .iter()
-        .map(|r#move| {
-            let piece = board.at(r#move.from).unwrap();
-            let m = square_to_algebraic(r#move.to);
-            format!("{piece}{m}")
-        })
-        .collect::<Vec<_>>()
+#[derive(Debug, Subcommand)]
+enum Commands {
+    /// Computes the number of leaf nodes at [depth]
+    /// in the tree of possible positions given the starting [position].
+    #[command(arg_required_else_help = true)]
+    Perft {
+        /// The position to compute perft for in FEN notation.
+        position: String,
+        /// The depth to compute to.
+        depth: u32,
+    },
 }
 
 fn main() {
-    let fen = "r3r1k1/pp3pbp/1qp1b1p1/2B5/2BP4/Q1n2N2/P4PPP/3R1K1R w - - 4 18";
-    let board = Board::from_fen(fen);
-    println!("{board}");
+    let args = Cli::parse();
+    match args.command {
+        Commands::Perft { position, depth } => {
+            let board = Board::from_fen(&position);
+            let mut total: u128 = 0;
+            for m in board.generate_moves() {
+                let mut b = board.clone();
+                b.apply(m);
+                let perft_val = perft(b, depth - 1);
+                println!("{m}\t{perft_val}");
+                total += perft_val;
+            }
+
+            println!("total:\t{total}");
+        }
+    }
+}
+
+fn perft(board: Board, depth: u32) -> u128 {
     let moves = board.generate_moves();
-    let formatted = format_moves(&board, &moves).join(", ");
-    println!("{formatted}");
-    println!("{}", board.to_fen());
+    if depth == 1 {
+        return moves.len() as u128;
+    } else if depth < 1 {
+        return 1;
+    }
+
+    moves
+        .iter()
+        .map(|&moove| {
+            let mut board_with_move = board.clone();
+            board_with_move.apply(moove);
+            perft(board_with_move, depth - 1)
+        })
+        .sum()
 }

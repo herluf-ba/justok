@@ -282,27 +282,89 @@ impl Board {
         *self.pieces.get(square as usize)?
     }
 
+    fn is_in_check(&self) -> bool {
+        self.is_side_in_check(self.white_to_move)
+    }
+
+    fn is_opponent_in_check(&self) -> bool {
+        self.is_side_in_check(!self.white_to_move)
+    }
+
     /// Does this move leave the current player in check?
     /// The check is performed by applying the move,
-    /// then generating opponent pseudo-legal moves and checking
-    /// if the king may then be captured.
-    /// This is inefficient but at least correct.
+    /// then checking if the opponent is in check.
     fn would_leave_in_check(&self, r#move: Move) -> bool {
         let mut b = (*self).clone();
         b.apply(r#move);
-        let king_pos = b
-            .pieces
-            .iter()
-            .position(|p| match p {
-                Some(Piece::KingWhite) if self.white_to_move => true,
-                Some(Piece::KingBlack) if !self.white_to_move => true,
-                _ => false,
-            })
-            .unwrap();
-        b.generate_pseudo_moves()
-            .into_iter()
-            .find(|&m| m.to as usize == king_pos)
-            .is_some()
+        b.is_opponent_in_check()
+        // let king_pos = b
+        //     .pieces
+        //     .iter()
+        //     .position(|p| match p {
+        //         Some(Piece::KingWhite) if self.white_to_move => true,
+        //         Some(Piece::KingBlack) if !self.white_to_move => true,
+        //         _ => false,
+        //     })
+        //     .unwrap();
+        // b.generate_pseudo_moves()
+        //     .into_iter()
+        //     .find(|&m| m.to as usize == king_pos)
+        //     .is_some()
+    }
+
+    /// Is black or white in check?
+    fn is_side_in_check(&self, check_white: bool) -> bool {
+        // Get position of players king
+        let king_pos = self.pieces.iter().position(|p| match p {
+            Some(Piece::KingWhite) if check_white => true,
+            Some(Piece::KingBlack) if !check_white => true,
+            _ => false,
+        });
+
+        // Pretend that the players king is any other piece of the same color.
+        // If the piece is able to capture a piece of the same kind,
+        // then the king is in check.
+        // So for example if we pretend the white king is a white knight,
+        // and that knight can capture a black knight,
+        // that means the black knight is checking the white king.
+        if let Some(king_pos) = king_pos {
+            use Piece::*;
+            let pieces = if check_white {
+                [
+                    QueenWhite,
+                    BishopWhite,
+                    RookWhite,
+                    KnightWhite,
+                    PawnWhite,
+                    KingWhite,
+                ]
+            } else {
+                [
+                    QueenBlack,
+                    BishopBlack,
+                    RookBlack,
+                    KnightBlack,
+                    PawnBlack,
+                    KingBlack,
+                ]
+            };
+            for piece in pieces {
+                let moves = generate_piece_moves(self, piece, king_pos as u8, true);
+                let has_capture = moves
+                    .iter()
+                    .find(|m| {
+                        self.at(m.to)
+                            .is_some_and(|other| other.is_same_kind(&piece))
+                    })
+                    .is_some();
+
+                if has_capture {
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 
     /// Generate all legal [Move]s possible within the current [Board].
@@ -324,7 +386,7 @@ impl Board {
                 match self.at(square) {
                     // Square had a piece with the color whose turn it is
                     Some(piece) if self.white_to_move == piece.is_white() => {
-                        let valid_target_squares = generate_piece_moves(self, piece, square);
+                        let valid_target_squares = generate_piece_moves(self, piece, square, false);
                         let mut piece_moves: Vec<Move> = valid_target_squares;
                         moves.append(&mut piece_moves);
                     }
@@ -339,7 +401,7 @@ impl Board {
 }
 
 /// Generate the valid moves for a particular piece on a certain square within a board.
-fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Move> {
+fn generate_piece_moves(board: &Board, piece: Piece, at: Square, skip_castling: bool) -> Vec<Move> {
     match piece {
         Piece::PawnWhite | Piece::PawnBlack => {
             let rank = at / 8;
@@ -492,49 +554,59 @@ fn generate_piece_moves(board: &Board, piece: Piece, at: Square) -> Vec<Move> {
             .map(|square| Move::new(at, square))
             .collect();
 
-            // Castling queen side for white.
-            if board.white_to_move
+            if !skip_castling {
+                // Castling queen side for white.
+                if board.white_to_move
                 // Still has castling rights
                 && board.can_white_castle_queen_side
                 // No piece is obstructing the castling
                 && board.pieces[3].is_none() && board.pieces[2].is_none() && board.pieces[1].is_none()
+                // Player is not in check
+                && !board.is_in_check()
                 // Check that d1 is not attacked, since the king can't castle through check.
-                && !board.would_leave_in_check(Move::new( 4, 3 ))
-            {
-                moves.push(Move::new(at, 2));
-            }
-            // Castling king side for white.
-            if board.white_to_move
+                && !board.would_leave_in_check(Move::new(4, 3))
+                {
+                    moves.push(Move::new(at, 2));
+                }
+                // Castling king side for white.
+                if board.white_to_move
                 // Still has castling rights
                 && board.can_white_castle_king_side
                 // No piece is obstructing the castling
                 && board.pieces[5].is_none() && board.pieces[6].is_none()
+                // Player is not in check
+                && !board.is_in_check()
                 // Check that e1 is not attacked, since the king can't castle through check.
-                && !board.would_leave_in_check(Move::new( 4, 5 ))
-            {
-                moves.push(Move::new(at, 6));
-            }
-            // Castling queen side for black.
-            if !board.white_to_move
+                && !board.would_leave_in_check(Move::new(4, 5))
+                {
+                    moves.push(Move::new(at, 6));
+                }
+                // Castling queen side for black.
+                if !board.white_to_move
                 // Still has castling rights
                 && board.can_black_castle_queen_side
                 // No piece is obstructing the castling
                 && board.pieces[59].is_none() && board.pieces[58].is_none() && board.pieces[57].is_none()
+                // Player is not in check
+                && !board.is_in_check()
                 // Check that d8 is not attacked, since the king can't castle through check.
-                && !board.would_leave_in_check(Move::new( 60, 59 ))
-            {
-                moves.push(Move::new(at, 58));
-            }
-            // Castling king side for black.
-            if !board.white_to_move
+                && !board.would_leave_in_check(Move::new(60, 59))
+                {
+                    moves.push(Move::new(at, 58));
+                }
+                // Castling king side for black.
+                if !board.white_to_move
                 // Still has castling rights
                 && board.can_black_castle_king_side
                 // No piece is obstructing the castling
                 && board.pieces[61].is_none() && board.pieces[62].is_none()
+                // Player is not in check
+                && !board.is_in_check()
                 // Check that e8 is not attacked, since the king can't castle through check.
-                && !board.would_leave_in_check(Move::new( 60, 61 ))
-            {
-                moves.push(Move::new(at, 62));
+                && !board.would_leave_in_check(Move::new(60, 61))
+                {
+                    moves.push(Move::new(at, 62));
+                }
             }
 
             moves

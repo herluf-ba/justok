@@ -861,7 +861,11 @@ fn checkmate_6() {
 #[test]
 fn checkmate_7() {
     let position = "k1K5/p1N5/8/8/8/8/8/8 b - - 0 1";
-    assert!(Board::from_fen(position).generate_moves().len() == 0);
+    let moves = Board::from_fen(position).generate_moves();
+    for m in moves.clone() {
+        println!("{m}");
+    }
+    assert!(moves.len() == 0);
 }
 
 #[test]
@@ -965,6 +969,9 @@ fn castling_1() {
     let extra_moves = generated_moves.difference(&expected_moves);
     assert!(extra_moves.count() == 0);
     let missing_moves = expected_moves.difference(&generated_moves);
+    for m in missing_moves.clone() {
+        println!("{m}");
+    }
     assert!(missing_moves.count() == 0);
 
     // Check that applying each move results in the expected board state.
@@ -1331,9 +1338,6 @@ fn castling_5() {
     // Check that the generated moves match the expected ones.
     let expected_moves: HashSet<Move> = expected.iter().map(|(r#move, _)| *r#move).collect();
     let extra_moves = generated_moves.difference(&expected_moves);
-    for m in extra_moves.clone() {
-        println!("{m}");
-    }
     assert!(extra_moves.count() == 0);
     let missing_moves = expected_moves.difference(&generated_moves);
     assert!(missing_moves.count() == 0);
@@ -1634,18 +1638,12 @@ fn promotion_3() {
     let extra_moves = generated_moves.difference(&expected_moves);
     assert!(extra_moves.count() == 0);
     let missing_moves = expected_moves.difference(&generated_moves);
-    for m in missing_moves.clone() {
-        println!("{m}");
-    }
     assert!(missing_moves.count() == 0);
 
     // Check that applying each move results in the expected board state.
     for (r#move, expected_fen) in expected {
         let mut board = Board::from_fen(position);
         board.apply(r#move);
-        if board.to_fen() != expected_fen {
-            println!("{}", r#move);
-        }
         assert_eq!(board.to_fen(), expected_fen);
         // TODO: Test undo's too
     }

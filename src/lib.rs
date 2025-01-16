@@ -65,6 +65,27 @@ impl Piece {
     pub fn is_white(&self) -> bool {
         *self as u8 != 0 && *self as u8 >> 3 < 1
     }
+
+    /// Check if another piece is of the same kind.
+    /// For instance, are both rooks?
+    pub fn is_same_kind(&self, other: &Piece) -> bool {
+        use Piece::*;
+        match (self, other) {
+            (PawnBlack, PawnWhite) => true,
+            (PawnWhite, PawnBlack) => true,
+            (KnightBlack, KnightWhite) => true,
+            (KnightWhite, KnightBlack) => true,
+            (BishopBlack, BishopWhite) => true,
+            (BishopWhite, BishopBlack) => true,
+            (RookBlack, RookWhite) => true,
+            (RookWhite, RookBlack) => true,
+            (QueenBlack, QueenWhite) => true,
+            (QueenWhite, QueenBlack) => true,
+            (KingBlack, KingWhite) => true,
+            (KingWhite, KingBlack) => true,
+            _ => false,
+        }
+    }
 }
 
 impl Display for Piece {
