@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use termchess::board::Board;
-use termchess::Move;
+use justok::board::Board;
+use justok::Move;
 
 #[test]
 fn opening_moves() {
