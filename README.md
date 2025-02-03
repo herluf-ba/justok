@@ -32,6 +32,19 @@ Establish some methods for measuring key metrics of the engine. Here's some numb
 - Memory usage of search
 - Playing performance of the engine (ELO?).
 
+### Creating a chess variants engine.
+I think I have a good idea for a chess game.
+I'm not sure though, so I want to do some design work and test some ideas.
+I want to be able to test many different variations on the regular rules of chess rapidly, to search for setups that are fun and balanced.
+
+To do so, I am writing a chess engine - with a twist!
+My engine won't assume that the board is 8x8. It may be any size.
+It also won't assume what pieces each player has.
+Instead, the engine will know about various piece behaviours that can be composed to try out new pieces.
+Like, what if the knight could also be promoted like a pawn?
+Or what if the board was 7x7, there were no kings and both rooks acted like kings? With check and everything.
+
+
 Piece Movements
 - March: Pawns
 - Step: King
@@ -52,20 +65,9 @@ Player Abilities
 - Recruit: Captured pieces turn color and can be placed back on the board.
 - 
 
-### Creating a chess variants engine.
-I think I have a good idea for a chess game.
-I'm not sure though, so I want to do some design work and test some ideas.
-I want to be able to test many different variations on the regular rules of chess rapidly, to search for setups that are fun and balanced.
-
-To do so, I am writing a chess engine - with a twist!
-My engine won't assume that the board is 8x8. It may be any size.
-It also won't assume what pieces each player has.
-Instead, the engine will know about various piece behaviours that can be composed to try out new pieces.
-Like, what if the knight could also be promoted like a pawn?
-Or what if the board was 7x7, there were no kings and both rooks acted like kings? With check and everything.
-
-
 
 
 Setup fastchess-cli to play matches agaist different versions of justok.
 Implement a _barely better move selection than random_ (maybe value captures higher?) and see if that version performs better.
+
+./fastchess -engine cmd=./target/release/justok name=justok-release -engine cmd=./target-old/release/justok name=justok-old format=epd -each tc=10+0.1 -rounds 1 -games 1

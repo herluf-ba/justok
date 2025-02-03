@@ -264,10 +264,14 @@ impl Board {
             }
 
             // Update castling rights
-            self.can_white_castle_queen_side &= !(p == Piece::KingWhite || r#move.from == 0);
-            self.can_white_castle_king_side &= !(p == Piece::KingWhite || r#move.from == 7);
-            self.can_black_castle_queen_side &= !(p == Piece::KingBlack || r#move.from == 56);
-            self.can_black_castle_king_side &= !(p == Piece::KingBlack || r#move.from == 63);
+            self.can_white_castle_queen_side &=
+                !(p == Piece::KingWhite || r#move.from == 0 || r#move.to == 0);
+            self.can_white_castle_king_side &=
+                !(p == Piece::KingWhite || r#move.from == 7 || r#move.to == 7);
+            self.can_black_castle_queen_side &=
+                !(p == Piece::KingBlack || r#move.from == 56 || r#move.to == 56);
+            self.can_black_castle_king_side &=
+                !(p == Piece::KingBlack || r#move.from == 63 || r#move.to == 63);
 
             // Update whose turn it is, and increment the move counter if needed.
             self.white_to_move = !self.white_to_move;
@@ -297,19 +301,6 @@ impl Board {
         let mut b = (*self).clone();
         b.apply(r#move);
         b.is_opponent_in_check()
-        // let king_pos = b
-        //     .pieces
-        //     .iter()
-        //     .position(|p| match p {
-        //         Some(Piece::KingWhite) if self.white_to_move => true,
-        //         Some(Piece::KingBlack) if !self.white_to_move => true,
-        //         _ => false,
-        //     })
-        //     .unwrap();
-        // b.generate_pseudo_moves()
-        //     .into_iter()
-        //     .find(|&m| m.to as usize == king_pos)
-        //     .is_some()
     }
 
     /// Is black or white in check?
